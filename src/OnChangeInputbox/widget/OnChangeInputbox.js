@@ -18,6 +18,13 @@ define([
         currValue: "",
         obj: null,
 
+        onChangeEvent: "",
+        onChangeMicroflow:"",
+        onChangeNanoflow:null,
+        onLeaveEvent: "",
+        onLeaveMicroflow:"",
+        onLeaveNanoflow:null,
+
         startup: function() {
             if (this._hasStarted) {
                 return;
@@ -33,7 +40,7 @@ define([
             }
 
             this.connect(this.inputBox, "onkeyup", dojoLang.hitch(this, this.eventOnChange));
-            this.connect(this.inputBox, "onblur", dojoLang.hitch(this, this.onLeaveMicroflow));
+            this.connect(this.inputBox, "onblur", dojoLang.hitch(this, this.onLeaveAction));
             this.connect(this.inputBox, "onfocus", dojoLang.hitch(this, this.eventInputFocus));
 
             this.actLoaded();
@@ -41,6 +48,7 @@ define([
 
         update: function(obj, callback) {
             this.obj = obj;
+
             if (this.subHandle) {
                 this.unsubscribe(this.subHandle);
                 this.subHandle = null;
@@ -74,21 +82,15 @@ define([
         eventOnChange: function() {
             if (this.obj.get(this.name) !== this.inputBox.value) {
                 this.obj.set(this.name, this.inputBox.value);
-                mx.data.save({
-                    mxobj: this.obj,
-                    callback: dojoLang.hitch(this, function() {
-                        // CHECK TRESHOLD HERE.
-                        if (this.chartreshold > 0) {
-                            if (this.inputBox.value.length > this.chartreshold) {
-                                this.eventCheckDelay();
-                            } else {
-                                clearTimeout(this.delay_timer);
-                            }
-                        } else {
-                            this.eventCheckDelay();
-                        }
-                    })
-                });
+                if (this.chartreshold > 0) {
+                    if (this.inputBox.value.length > this.chartreshold) {
+                        this.eventCheckDelay();
+                    } else {
+                        clearTimeout(this.delay_timer);
+                    }
+                } else {
+                    this.eventCheckDelay();
+                }
             }
         },
 
@@ -97,36 +99,62 @@ define([
                 if (this.delay_timer) {
                     clearTimeout(this.delay_timer);
                 }
-                this.delay_timer = setTimeout(dojoLang.hitch(this, this.onChangeMicroflow), this.delay); // in milliseconds, seconds * 1000 !
+                this.delay_timer = setTimeout(dojoLang.hitch(this, this.onChangeAction), this.delay); // in milliseconds, seconds * 1000 !
             } else {
-                this.onChangeMicroflow();
+                this.onChangeAction();
             }
         },
 
-        onChangeMicroflow: function() {
+        onChangeAction: function () {
             this.delay_timer = null;
-            this.executeMicroflow(this.onchangemf);
+            if (this.onChangeEvent === "callMicroflow" && this.onChangeMicroflow) {
+                this._executeMicroflow(this.onChangeMicroflow);
+            } else if (this.onChangeEvent === "callNanoflow" && this.onChangeNanoflow.nanoflow && this.mxcontext) {
+                this._executeNanoflow(this.onChangeNanoflow);
+            } else if(this.onChangeEvent === "doNothing") {
+                return;
+            } else {
+                mx.ui.error("No action specified for " + this.onChangeEvent)
+            }
         },
 
-        onLeaveMicroflow: function() {
+        onLeaveAction: function () {
             this.delay_timer = null;
-            this.executeMicroflow(this.onleavemf);
+            if (this.onLeaveEvent === "callMicroflow" && this.onLeaveMicroflow) {
+                this._executeMicroflow(this.onLeaveMicroflow);
+            } else if (this.onLeaveEvent === "callNanoflow" && this.onLeaveNanoflow.nanoflow && this.mxcontext) {
+                this._executeNanoflow(this.onLeaveNanoflow);
+            } else if(this.onLeaveEvent === "doNothing") {
+                return;
+            } else {
+                mx.ui.error("No action specified for " +  this.onLeaveEvent)
+            }
         },
 
-        executeMicroflow: function(mf) {
-            if (mf && this.obj) {
+        _executeNanoflow: function(nanoflow){
+            window.mx.data.callNanoflow({
+                nanoflow: nanoflow,
+                origin: this.mxform,
+                context: this.mxcontext,
+                callback: function() {},
+                error: function (error) {
+                    mx.ui.error("An error occurred while executing the on nanoflow: " + error.message);
+                }
+            });
+        },
+
+        _executeMicroflow: function(microflow) {
+            if (microflow && this.obj) {
                 mx.data.action({
-                    store: {
-                        caller: this.mxform
-                    },
+                    origin: this.mxform,
                     params: {
-                        actionname: mf,
+                        actionname: microflow,
                         applyto: "selection",
                         guids: [this.obj.getGuid()]
                     },
                     callback: function() {},
                     error: function() {
-                        logger.error("OnChangeInputbox.widget.OnChangeInputbox.triggerMicroFlow: XAS error executing microflow");
+                        mx.ui.error("OnChangeInputbox.widget.OnChangeInputbox.triggerMicroFlow: XAS error executing microflow");
                     }
                 });
             }
